@@ -1,0 +1,277 @@
+---
+title: "Northdale model contrast threat and empath"
+author: "CGT"
+date: "Wednesday, July 30, 2014"
+output: html_document
+---
+
+This document records the re-analysis of a data file sent to me by Kevin D and 
+Mike Q.  I am using LAVAAN in R to model Prejudice as some function of Threat, Empathy, and Closeness, with SEM methods.
+
+#   Read the data
+#   read tab-delimited data file:
+```{r}
+# setwd("d:/Dropbox/research/Social Psychology/northdale/Tradeoff threat vs empathy/")
+data<-read.table("Northdale survey (reverse coded).dat",
+                    header = TRUE,sep="\t")
+library(lavaan);library(knitr);library(psych);library(GPArotation);library(dplyr)
+```
+
+
+#   scale variables.
+
+We want to scale all the variables so they are on 1-5 scale.  We also compute alpha and omega.
+
+```{r}
+#   scale distance
+    data$crowflies_address_infstlmnt<-(1-data$crowflies_address_infstlmnt/max(data$crowflies_address_infstlmnt,na.rm=T))
+    data$Cnt_IS_see<-data$Cnt_IS_see
+    data$Cnt_IS_smell<-data$Cnt_IS_smell
+    data$Cnt_IS_hear<-data$Cnt_IS_hear
+    data$closeness_scale<-(data$Cnt_IS_see + data$Cnt_IS_smell + data$Cnt_IS_hear + data$crowflies_address_infstlmnt)
+    closenessdf<-data.frame(data$Cnt_IS_see,data$Cnt_IS_smell,data$Cnt_IS_hear,data$crowflies_address_infstlmnt)    
+    omega(closenessdf,nfactors=1)
+  
+
+#   Threat
+    data$Thrt_Phy1<-data$Thrt_Phy1/3
+    data$Thrt_Phy2<-data$Thrt_Phy2/3
+    data$Thrt_Phy3<-data$Thrt_Phy3/3
+    data$threat_scale<-data$Thrt_Phy1+data$Thrt_Phy2+data$Thrt_Phy3
+    threatdf<-data.frame(data$Thrt_Phy1, data$Thrt_Phy2, data$Thrt_Phy3)    
+    omega(threatdf,nfactors=1)
+#   so what 
+
+
+  
+#   Empathy
+    data$Empath1<-data$Empath1/3    
+    data$Empath2<-data$Empath2/3
+    data$Empath3<-data$Empath3/3
+    data$empathy_scale<-(data$Empath1 + data$Empath2 + data$Empath3)
+    empathydf<-data.frame(data$Empath1 ,  data$Empath2 ,  data$Empath3)    
+    alpha(empathydf)
+    omega(empathydf,nfactors=1)
+
+
+
+#   Prejudice
+    data$Att_IS1<-(data$Att_IS1-1)/6.75    
+    data$Att_IS2<-(data$Att_IS2-1)/6.75  
+    data$Att_IS4<-(data$Att_IS4-1)/6.75  
+    data$prejudice_scale<-(data$Att_IS1 + data$Att_IS2 + data$Att_IS4)
+    prejudicedf<-data.frame(data$Att_IS1 ,  data$Att_IS2 ,  data$Att_IS4)    
+    omega(prejudicedf,nfactors=1)
+    alpha(prejudicedf)
+
+
+#   Contact quantity
+    data$Cnt_pos_B<-data$Cnt_pos_B/2
+    data$Cnt_pos_IS1<-data$Cnt_pos_IS1/2
+    data$contactquant_scale<-data$Cnt_pos_B+data$Cnt_pos_IS1
+    contactquantdf<-data.frame(data$Cnt_pos_B,data$Cnt_pos_IS1)    
+    omega(contactquantdf,nfactors=1)
+    alpha(contactquantdf)
+
+
+
+#   Contact_avoid
+    data$cnt_avd2<-data$cnt_avd2/3
+    data$cnt_avd3<-data$cnt_avd3/3
+    data$cnt_avd4<-data$cnt_avd4/3
+    data$contactavoid_scale<-data$cnt_avd2+data$cnt_avd3+data$cnt_avd4
+    contactavoiddf<-data.frame(data$cnt_avd2,data$cnt_avd3,data$cnt_avd4)    
+    omega(contactavoiddf,nfactors=1)
+    alpha(contactavoiddf)
+
+
+#   Contact_quality
+    data$Cnt_Qul_IS1<-data$Cnt_Qul_IS1/3
+    data$Cnt_Qul_IS2<-data$Cnt_Qul_IS2/3
+    data$Cnt_Qul_IS3<-data$Cnt_Qul_IS3/3
+    data$contactqual_scale<-data$Cnt_Qul_IS1+data$Cnt_Qul_IS2+data$Cnt_Qul_IS3
+    contactqualdf<-data.frame(data$Cnt_Qul_IS1,data$Cnt_Qul_IS2,data$Cnt_Qul_IS3)    
+    omega(contactqualdf,nfactors=1)
+    alpha(contactqualdf)
+
+#   Let's get some descriptive statistics on the scale variables
+    library(dplyr)
+    datax<-tbl_df(data) # convert to format dplyr likes
+    statsum<-summarise_each(datax,funs(mean(.,na.rm=T),sd(.,na.rm=T),max(.,na.rm=T)),matches("scale"))
+    print(statsum)
+    
+#   Let's take a look at the inter-connectedness of the contact scales
+    contactvars<-data.frame(data$contactqual_scale,data$contactquant_scale,data$contactavoid_scale,data$closeness_scale)
+    pairs.panels(contactvars)
+    princomp(~.,contactvars)
+    principal(contactvars,2,rotate="cluster")
+
+    # The analysis above shows that the contact vars are correlated, and that there appear to be
+    # two separate factors, strongly defined by contactquant and contactavoid, with contactqual
+    # loading on both.  It would be useful to test a CFA with original items, proposing 3 separate
+
+    contactfactors<-"
+
+ 
+    #   Contact_quant
+        contactquant=~Cnt_pos_B+Cnt_pos_IS1
+
+    #   Contact_avoid
+        contactavoid=~cnt_avd2+cnt_avd3+cnt_avd4
+
+    #   Contact_quality
+        contactqual=~Cnt_Qul_IS1+Cnt_Qul_IS2+Cnt_Qul_IS3
+
+"
+
+      #     We now run the CFA
+            contactfactorsfit<-sem(contactfactors,data=data)
+            kable(summary(contactfactorsfit,rsquare=T),format="html")            
+            parameterEstimates(contactfactorsfit) 
+            resid(contactfactorsfit, type = "standardized")
+            fitmeasures(contactfactorsfit)
+            modindices(contactfactorsfit)
+
+
+#   Kevin wants to take a look at the negative contact variables
+    contactnegativedf<-data.frame(data$Cnt_neg_IS1,data$Cnt_neg_IS2,data$Cnt_neg_IS3)
+    pairs.panels(contactnegativedf)
+    data$contactnegative_scale<-data$Cnt_neg_IS1 + data$Cnt_neg_IS2 + data$Cnt_neg_IS3    
+
+    # clearly good properties, so we add this to the contactvars dataframe, and look again
+    contactvars<-data.frame(data$contactqual_scale,data$contactquant_scale,data$contactavoid_scale,data$closeness_scale,data$contactnegative_scale)
+    pairs.panels(contactvars)
+    princomp(~.,contactvars)
+    principal(contactvars,2,rotate="cluster")
+    
+    # Very clear pattern, again.  Now take a look at negative emotions
+    datax<-tbl_df(data)
+    negativeemotionsdf<-select(datax,starts_with("Emot_IS_G"))
+    negativeemotionsdf<-negativeemotionsdf[,1:8]
+    pairs.panels(negativeemotionsdf)
+    princomp(~.,negativeemotionsdf)
+    principal(negativeemotionsdf,2,rotate="cluster")
+
+
+```
+
+
+We now define a LAVAAN model (measurement + structural).  This model proposes 
+that there are two paths to prejudice, one through empathy (a classic 
+theoretical proposition in this area), and another through threat, 
+which itself is a function of closeness or distance of the respondents 
+to settlers. But we now complexify the model a bit, getting contact to
+predict empathy.
+
+
+```{r}
+
+medcloseness2<-"
+        
+#   MEASUREMENT MODEL (Lavaan fixes first items for scale to 1.0, 
+repeated here to be clear)
+
+#   Closeness
+    closeness=~1.0*(crowflies_address_infstlmnt) + Cnt_IS_see + Cnt_IS_smell+ Cnt_IS_hear
+
+#   Threat
+    threatphy=~1.0*Thrt_Phy1 + Thrt_Phy2 + Thrt_Phy3
+
+#   Empathy
+    empathy=~1.0*Empath1 + Empath2 + Empath3
+
+#   Prejudice
+    prejudice=~1*Att_IS1 + Att_IS2 + Att_IS4
+    
+#   Contact_pos
+#    contactpos=~Cnt_Qul_IS1+Cnt_Qul_IS2+Cnt_Qul_IS3
+
+    contactquant=~Cnt_pos_B+Cnt_pos_IS1
+
+#   Contact_avoid
+    contactavoid=~cnt_avd2+cnt_avd3+cnt_avd4
+
+#   Contact_quality
+    contactqual=~Cnt_Qul_IS1+Cnt_Qul_IS2+Cnt_Qul_IS3
+
+#   Negative_emotions
+#    negemotion=~Emot_Is_G2+Emot_Is_G4+Emot_Is_G5
+
+#   Negative contact
+    contactnegative=~Cnt_neg_IS1 + Cnt_neg_IS2
+
+
+#   REGRESSIONS / STRUCTURAL MODEL
+#   contactqual~closeness+contactnegative
+    contactquant~contactqual+contactnegative
+    contactqual~threatphy+contactnegative
+    contactnegative~closeness
+    threatphy~closeness+contactnegative
+    empathy~contactqual+threatphy
+    contactavoid~threatphy+contactqual+contactnegative
+#   contactavoid~closeness
+#   contactavoid~threatphy
+#   negemotion~contactquant+threatphy
+    prejudice~contactquant+contactavoid
+ 
+       
+"
+
+  # test
+
+
+
+```
+
+We now run the SEM, asking for a summary of the model, parameter estimates, standardized residuals, comprehensive reporting on measures of fit, and modification indices.  Standard SEM analysis.
+Cannot get Git to update though
+
+```{r}
+
+medcloseness2fit<-sem(medcloseness2,data=data)
+kable(summary(medcloseness2fit,rsquare=T),format="html")            
+parameterEstimates(medcloseness2fit) 
+resid(medcloseness2fit, type = "standardized")
+fitmeasures(medcloseness2fit)
+modindices(medcloseness2fit)
+
+```
+
+
+We do some additional exploration.  THe questions now are whether Closeness moderates the relationship between 
+contact and prejudice
+
+```{r echo=FALSE}  
+
+# check out scatterplots etc.
+modeldatadf<-data.frame(data$closeness,data$contactquant,data$contactavoid,data$threat,data$empathy,data$prejudice)
+pairs.panels(modeldatadf)
+
+#  check out possible moderation of contact-prej relationship by closeness
+closeness_X_contactprej<-lm(prejudice_scale~closeness_scale*contactquant_scale,data=data)
+summary(closeness_X_contactprej)
+
+#  check out possible moderation of contactqual-prej relationship by closeness
+closeness_X_contactqualprej<-lm(prejudice_scale~closeness_scale*contactqual_scale,data=data)
+summary(closeness_X_contactqualprej)
+
+
+# Check out possible contact-quality dependence on closeness
+scatter.smooth(data$closeness_scale,data$contactqual_scale)
+scatter.smooth(data$contactqual_scale,data$contactquant_scale)
+cor(data$contactqual_scale,data$contactquant_scale,use="pairwise.complete")
+
+# Check out possible moderation of contactquant-prej by contact-qual
+contactqual_X_contactquantprej<-lm(prejudice_scale~contactqual_scale*contactquant_scale,data=data)
+summary(contactqual_X_contactquantprej)
+
+
+```
+
+
+
+
+
+
+
+
