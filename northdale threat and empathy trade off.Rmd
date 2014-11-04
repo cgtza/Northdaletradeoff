@@ -238,6 +238,55 @@ modindices(medcloseness2fit)
 ```
 
 
+```{r}
+#  Here we want to perform k-fold cross validation empirically.  We need to 
+#  load Caret and then partition the dataset, imputing for missing data etc
+
+require(caret)
+
+datax<-select(data,crowflies_address_infstlmnt,Cnt_IS_see,Cnt_IS_smell,Cnt_IS_hear,
+              Thrt_Phy1 ,  Thrt_Phy2 ,  Thrt_Phy3 ,  Empath1 ,  Empath2 ,  Empath3, 
+              Att_IS1 ,  Att_IS2 ,  Att_IS4, Cnt_pos_B, Cnt_pos_IS1, cnt_avd2, cnt_avd3, cnt_avd4, 
+              Cnt_Qul_IS1, Cnt_Qul_IS2, Cnt_Qul_IS3, Cnt_neg_IS1 ,  Cnt_neg_IS2)
+
+  datay<-preProcess(datax,method="knnImpute",k=5)
+  dataj<-as.data.frame(datay$data)
+
+  xval<-matrix(nrow=200,ncol=8)
+  colnames(xval)<-c("rmsea_1","cfi_1","tfi_1","srmr_1","rmsea_2","cfi_2","tfi_2","srmr_2",)
+
+for (i in 1:10){
+
+  train<-createDataPartition(dataj[,23])
+  traindata<-dataj[train$Resample1,]
+  testdata<-dataj[-train$Resample1,]
+
+# Now we need to run, and gather some of the fit indices 
+
+  medcloseness2fit<-sem(medcloseness2,data=traindata)
+  x<-fitmeasures(medcloseness2fit,c("rmsea","cfi","tfi","srmr"))
+  xval[i,1]<-x[1]
+  xval[i,2]<-x[2]
+  xval[i,3]<-x[3]
+  xval[i,4]<-x[4]
+
+  medcloseness2fit<-sem(medcloseness2,data=testdata)
+  y<-fitmeasures(medcloseness2fit,c("rmsea","cfi","tfi","srmr"))
+  xval[i,5]<-y[1]
+  xval[i,6]<-y[2]
+  xval[i,7]<-y[3]
+  xval[i,8]<-y[4]
+
+}
+
+
+
+
+```
+
+
+
+
 We do some additional exploration.  THe questions now are whether Closeness moderates the relationship between 
 contact and prejudice
 
