@@ -20,7 +20,7 @@ library(lavaan);library(knitr);library(psych);library(GPArotation);library(dplyr
 
 #   scale variables.
 
-We want to scale all the variables so they are on 1-5 scale.  We also compute alpha and omega.
+We want to scale all the variables so they are on 0-4 scale.  We also compute alpha and omega.
 
 ```{r}
 #   scale distance
@@ -198,17 +198,17 @@ repeated here to be clear)
 #    negemotion=~Emot_Is_G2+Emot_Is_G4+Emot_Is_G5
 
 #   Negative contact
-    contactnegative=~Cnt_neg_IS1 + Cnt_neg_IS2
+#    contactnegative=~Cnt_neg_IS1 + Cnt_neg_IS2
 
 
 #   REGRESSIONS / STRUCTURAL MODEL
-#   contactqual~closeness+contactnegative
-    contactquant~contactqual+contactnegative
-    contactqual~threatphy+contactnegative
-    contactnegative~closeness
-    threatphy~closeness+contactnegative
-    empathy~contactqual+threatphy
-    contactavoid~threatphy+contactqual+contactnegative
+#   contactqual~closeness
+    contactquant~contactqual
+    contactqual~threatphy
+#   contactnegative~closeness
+    threatphy~closeness
+    empathy~contactqual
+    contactavoid~threatphy+contactqual
 #   contactavoid~closeness
 #   contactavoid~threatphy
 #   negemotion~contactquant+threatphy
@@ -238,11 +238,93 @@ modindices(medcloseness2fit)
 ```
 
 
+We need to compute the ns paths now
+
+
+```{r}
+
+medcloseness3<-"
+        
+#   MEASUREMENT MODEL (Lavaan fixes first items for scale to 1.0, 
+repeated here to be clear)
+
+#   Closeness
+    closeness=~1.0*(crowflies_address_infstlmnt) + Cnt_IS_see + Cnt_IS_smell+ Cnt_IS_hear
+
+#   Threat
+    threatphy=~1.0*Thrt_Phy1 + Thrt_Phy2 + Thrt_Phy3
+
+#   Empathy
+    empathy=~1.0*Empath1 + Empath2 + Empath3
+
+#   Prejudice
+    prejudice=~1*Att_IS1 + Att_IS2 + Att_IS4
+    
+#   Contact_pos
+#    contactpos=~Cnt_Qul_IS1+Cnt_Qul_IS2+Cnt_Qul_IS3
+
+    contactquant=~Cnt_pos_B+Cnt_pos_IS1
+
+#   Contact_avoid
+    contactavoid=~cnt_avd2+cnt_avd3+cnt_avd4
+
+#   Contact_quality
+    contactqual=~Cnt_Qul_IS1+Cnt_Qul_IS2+Cnt_Qul_IS3
+
+#   Negative_emotions
+#    negemotion=~Emot_Is_G2+Emot_Is_G4+Emot_Is_G5
+
+#   Negative contact
+#    contactnegative=~Cnt_neg_IS1 + Cnt_neg_IS2
+
+
+#   REGRESSIONS / STRUCTURAL MODEL
+#   contactqual~closeness
+    contactquant~contactqual
+    contactqual~threatphy
+#   contactnegative~closeness
+    threatphy~closeness
+    empathy~contactqual
+    contactavoid~threatphy+contactqual
+#   contactavoid~closeness
+#   contactavoid~threatphy
+#   negemotion~contactquant+threatphy
+    prejudice~contactquant+contactavoid
+ 
+       
+"
+
+  # test
+
+
+
+```
+
+We now run the SEM, asking for a summary of the model, parameter estimates, standardized residuals, comprehensive reporting on measures of fit, and modification indices.  Standard SEM analysis.
+Cannot get Git to update though
+
+```{r}
+
+medcloseness3fit<-sem(medcloseness3,data=data)
+kable(summary(medcloseness3fit,rsquare=T),format="html")            
+parameterEstimates(medcloseness3fit) 
+resid(medcloseness3fit, type = "standardized")
+fitmeasures(medcloseness3fit)
+modindices(medcloseness3fit)
+
+```
+
+
+
+
+
 ```{r}
 #  Here we want to perform k-fold cross validation empirically.  We need to 
 #  load Caret and then partition the dataset, imputing for missing data etc
 
 require(caret)
+
+# Split data etc.
 
 datax<-select(data,crowflies_address_infstlmnt,Cnt_IS_see,Cnt_IS_smell,Cnt_IS_hear,
               Thrt_Phy1 ,  Thrt_Phy2 ,  Thrt_Phy3 ,  Empath1 ,  Empath2 ,  Empath3, 
@@ -252,10 +334,25 @@ datax<-select(data,crowflies_address_infstlmnt,Cnt_IS_see,Cnt_IS_smell,Cnt_IS_he
   datay<-preProcess(datax,method="knnImpute",k=5)
   dataj<-as.data.frame(datay$data)
 
-  xval<-matrix(nrow=200,ncol=8)
-  colnames(xval)<-c("rmsea_1","cfi_1","tfi_1","srmr_1","rmsea_2","cfi_2","tfi_2","srmr_2",)
+  xval<-matrix(nrow=100,ncol=8)
+  colnames(xval)<-c("rmsea_1","cfi_1","tli_1","srmr_1","rmsea_2","cfi_2","tli_2","srmr_2")
 
-for (i in 1:10){
+
+
+train<-createDataPartition(dataj[,23])
+dataj$group[train$Resample1]<-"A"
+dataj$group[-train$Resample1]<-"B"
+
+medcloseness2fit<-sem(medcloseness2,data=dataj,group="group")
+  x<-fitmeasures(medcloseness2fit,c("rmsea","cfi","tli","srmr"))
+
+library(semTools)
+measurementInvariance(medcloseness2, data = dataj, group = "group")
+
+
+# Do the SEM 100 times, and gather fit indices
+
+for (i in 1:100){
 
   train<-createDataPartition(dataj[,23])
   traindata<-dataj[train$Resample1,]
@@ -264,14 +361,14 @@ for (i in 1:10){
 # Now we need to run, and gather some of the fit indices 
 
   medcloseness2fit<-sem(medcloseness2,data=traindata)
-  x<-fitmeasures(medcloseness2fit,c("rmsea","cfi","tfi","srmr"))
+  x<-fitmeasures(medcloseness2fit,c("rmsea","cfi","tli","srmr"))
   xval[i,1]<-x[1]
   xval[i,2]<-x[2]
   xval[i,3]<-x[3]
   xval[i,4]<-x[4]
 
   medcloseness2fit<-sem(medcloseness2,data=testdata)
-  y<-fitmeasures(medcloseness2fit,c("rmsea","cfi","tfi","srmr"))
+  y<-fitmeasures(medcloseness2fit,c("rmsea","cfi","tli","srmr"))
   xval[i,5]<-y[1]
   xval[i,6]<-y[2]
   xval[i,7]<-y[3]
@@ -279,7 +376,21 @@ for (i in 1:10){
 
 }
 
+# Now let's take the difference between the estimates
 
+xval<-as.data.frame(xval)
+xval$rmsea_diff<-xval$rmsea_2-xval$rmsea_1
+xval$cfi_diff<-xval$cfi_2-xval$cfi_1
+xval$tli_diff<-xval$tli_2-xval$tli_1
+xval$srmr_diff<-xval$srmr_2-xval$srmr_1
+
+ggplot(data=xval,aes(x=rmsea_diff))+geom_histogram(color="black",fill="white",binwidth=.01)
+ggplot(data=xval,aes(x=cfi_diff))+geom_histogram(color="black",fill="white",binwidth=.01)
+ggplot(data=xval,aes(x=tli_diff))+geom_histogram(color="black",fill="white",binwidth=.01)
+ggplot(data=xval,aes(x=srmr_diff))+geom_histogram(color="black",fill="white",binwidth=.01)
+
+xvalfitmeasures<-gather(xval,fitmeasure,fitvalue,rmsea_1:srmr_diff)
+summarise(group_by(xvalfitmeasures,fitmeasure),m=mean(fitvalue),sd=sd(fitvalue),qt05=quantile(fitvalue,.05),qt95=quantile(fitvalue,.95))
 
 
 ```
